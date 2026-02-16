@@ -184,10 +184,10 @@ export const DataSim: React.FC = () => {
   const explanation = getExplanation();
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 p-2 md:p-4 rounded-xl overflow-y-auto">
+    <div className="flex flex-col h-full bg-slate-50 p-2 md:p-4 rounded-xl overflow-hidden">
       
-      {/* Navigation Tabs */}
-      <div className="flex flex-wrap justify-center gap-2 md:gap-4 mb-6">
+      {/* Navigation Tabs - Fixed at top */}
+      <div className="flex-none flex flex-wrap justify-center gap-2 md:gap-4 mb-4 md:mb-6">
           <button 
             onClick={() => setGraphType('bar')}
             className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all shadow-sm ${graphType === 'bar' ? 'bg-pink-500 text-white shadow-lg scale-105' : 'bg-white text-gray-500 hover:bg-pink-50'}`}
@@ -214,9 +214,11 @@ export const DataSim: React.FC = () => {
           </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row h-full gap-6">
-        {/* Controls Column */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-4">
+      {/* Main Content - Flex layout to fit screen on md+ */}
+      <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-6 min-h-0 overflow-y-auto md:overflow-hidden">
+        
+        {/* Controls Column - Mobile: Stacked, Tablet: Side column with scroll */}
+        <div className="w-full md:w-1/3 flex-none md:overflow-y-auto custom-scrollbar flex flex-col gap-4 p-1">
             {renderControls()}
             
             <div className={`${explanation.bg} p-5 rounded-2xl ${explanation.color} border-2 border-white shadow-sm`}>
@@ -228,11 +230,11 @@ export const DataSim: React.FC = () => {
             </div>
         </div>
 
-        {/* Chart Column */}
-        <div className="flex-1 bg-white p-4 rounded-3xl shadow-xl border-4 border-slate-100 flex flex-col min-h-[400px]">
-            <h3 className="text-center font-bold text-gray-400 mb-2 uppercase tracking-widest text-sm">Visualizing Data</h3>
+        {/* Chart Column - Mobile: Stacked with min-height, Tablet: Fills remaining space */}
+        <div className="flex-1 bg-white p-4 rounded-3xl shadow-xl border-4 border-slate-100 flex flex-col min-h-[400px] md:min-h-0 md:h-full">
+            <h3 className="flex-none text-center font-bold text-gray-400 mb-2 uppercase tracking-widest text-sm">Visualizing Data</h3>
             
-            <div className="flex-1 w-full relative">
+            <div className="flex-1 w-full relative min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
                     {graphType === 'bar' ? (
                         <BarChart data={surveyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>

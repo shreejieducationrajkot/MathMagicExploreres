@@ -1,74 +1,196 @@
 import React, { useState, useEffect } from 'react';
-import { Shapes, RefreshCcw, ArrowRight } from 'lucide-react';
-import { PatternItem } from '../../types';
+import { 
+  Shapes, RefreshCcw, ArrowRight, Calculator, Palette,
+  Rocket, Moon, Star, Sun, Cloud, Umbrella, Zap, Snowflake,
+  Cat, Dog, Fish, Bird, Bug, Flower, Heart, Circle, Square, Triangle, Hexagon
+} from 'lucide-react';
 
-const ITEMS: Omit<PatternItem, 'id'>[] = [
-    { color: 'bg-red-500', shape: 'circle' },
-    { color: 'bg-blue-500', shape: 'square' },
-    { color: 'bg-green-500', shape: 'triangle' },
-    { color: 'bg-yellow-400', shape: 'star' },
-];
+// Local types to avoid modifying types.ts
+type PatternMode = 'shapes' | 'numbers';
+type ThemeType = 'geometric' | 'space' | 'weather' | 'animals';
+
+interface PatternElement {
+  id: string;
+  val: any; // Icon component or Number value
+  color: string;
+  label: string; // For accessibility/text
+  isIcon: boolean;
+}
+
+// Configuration for themes
+const THEMES: Record<ThemeType, { label: string, items: { icon: any, label: string }[], colors: string[] }> = {
+  geometric: {
+     label: 'Shapes',
+     items: [
+       { icon: Circle, label: 'Circle' },
+       { icon: Square, label: 'Square' },
+       { icon: Triangle, label: 'Triangle' },
+       { icon: Hexagon, label: 'Hexagon' }
+     ],
+     colors: ['text-red-500', 'text-blue-500', 'text-green-500', 'text-purple-500']
+  },
+  space: {
+     label: 'Space',
+     items: [
+       { icon: Rocket, label: 'Rocket' },
+       { icon: Moon, label: 'Moon' },
+       { icon: Star, label: 'Star' },
+       { icon: Sun, label: 'Sun' }
+     ],
+     colors: ['text-indigo-600', 'text-slate-400', 'text-yellow-400', 'text-orange-500']
+  },
+  weather: {
+     label: 'Weather',
+     items: [
+       { icon: Cloud, label: 'Cloud' },
+       { icon: Sun, label: 'Sun' },
+       { icon: Umbrella, label: 'Umbrella' },
+       { icon: Zap, label: 'Lightning' }
+     ],
+     colors: ['text-sky-400', 'text-yellow-500', 'text-purple-500', 'text-amber-500']
+  },
+  animals: {
+     label: 'Animals',
+     items: [
+       { icon: Cat, label: 'Cat' },
+       { icon: Dog, label: 'Dog' },
+       { icon: Fish, label: 'Fish' },
+       { icon: Bird, label: 'Bird' }
+     ],
+     colors: ['text-orange-500', 'text-amber-800', 'text-blue-500', 'text-red-500']
+  }
+};
+
+const NUMBER_STEPS = [1, 2, 5, 10];
 
 export const PatternSim: React.FC = () => {
-  const [sequence, setSequence] = useState<PatternItem[]>([]);
-  const [options, setOptions] = useState<PatternItem[]>([]);
+  const [mode, setMode] = useState<PatternMode>('shapes');
+  const [theme, setTheme] = useState<ThemeType>('space'); // Default to fun theme
+  
+  const [sequence, setSequence] = useState<PatternElement[]>([]);
+  const [options, setOptions] = useState<PatternElement[]>([]);
   const [missingIndex, setMissingIndex] = useState<number>(0);
-  const [placedItem, setPlacedItem] = useState<PatternItem | null>(null);
+  const [placedItem, setPlacedItem] = useState<PatternElement | null>(null);
   const [status, setStatus] = useState<'playing' | 'correct' | 'wrong'>('playing');
 
-  // Generate a pattern on mount
   useEffect(() => {
     generateNewPattern();
-  }, []);
+  }, [mode, theme]);
 
   const generateNewPattern = () => {
-    const patternType = Math.random() > 0.5 ? 'ABAB' : 'ABCABC';
-    const item1 = ITEMS[Math.floor(Math.random() * ITEMS.length)];
-    let item2 = ITEMS[Math.floor(Math.random() * ITEMS.length)];
-    while(item2 === item1) item2 = ITEMS[Math.floor(Math.random() * ITEMS.length)];
-    
-    let item3 = ITEMS[Math.floor(Math.random() * ITEMS.length)];
-    while(item3 === item1 || item3 === item2) item3 = ITEMS[Math.floor(Math.random() * ITEMS.length)];
-
-    let baseSeq: any[] = [];
-    if (patternType === 'ABAB') {
-        baseSeq = [item1, item2, item1, item2, item1, item2];
-    } else {
-        baseSeq = [item1, item2, item3, item1, item2, item3];
-    }
-
-    // Add IDs and create the full sequence
-    const fullSeq = baseSeq.map((it, idx) => ({ ...it, id: `p-${idx}` }));
-    
-    // Decide which one to hide (last one for simplicity for 1st graders)
-    const hideIdx = 5; 
-    setMissingIndex(hideIdx);
-    setSequence(fullSeq);
     setPlacedItem(null);
     setStatus('playing');
 
-    // Create options (correct answer + 2 random wrongs)
-    const correct = fullSeq[hideIdx];
-    const wrongs = ITEMS.filter(i => i.shape !== correct.shape || i.color !== correct.color)
-                        .sort(() => 0.5 - Math.random())
-                        .slice(0, 2)
-                        .map((w, i) => ({ ...w, id: `opt-${i}` }));
+    // 1. Determine Missing Index (Random between 2 and 5 to ensure context)
+    // Sequence length is 6. Indices 0..5. We avoid hiding 0 or 1 so kid sees the start.
+    const hideIdx = Math.floor(Math.random() * 4) + 2; // Returns 2, 3, 4, or 5
+    setMissingIndex(hideIdx);
+
+    let newSeq: PatternElement[] = [];
+    let answer: PatternElement;
+    let distractors: PatternElement[] = [];
+
+    if (mode === 'numbers') {
+        // --- NUMBER PATTERN LOGIC ---
+        const start = Math.floor(Math.random() * 10) + 1; // 1 to 10
+        const step = NUMBER_STEPS[Math.floor(Math.random() * NUMBER_STEPS.length)];
+        const isAscending = Math.random() > 0.3; // Mostly ascending, sometimes descending
+        
+        for (let i = 0; i < 6; i++) {
+            const val = isAscending ? start + (i * step) : (start + 20) - (i * step); // ensure positive for desc
+            newSeq.push({
+                id: `num-${i}`,
+                val: val,
+                color: 'text-indigo-600',
+                label: val.toString(),
+                isIcon: false
+            });
+        }
+        
+        answer = newSeq[hideIdx];
+        
+        // Generate smart distractors
+        const ansVal = answer.val as number;
+        distractors = [
+            { id: 'd1', val: ansVal + step, color: 'text-indigo-600', label: (ansVal + step).toString(), isIcon: false },
+            { id: 'd2', val: ansVal - step, color: 'text-indigo-600', label: (ansVal - step).toString(), isIcon: false },
+            { id: 'd3', val: ansVal + (step * 2), color: 'text-indigo-600', label: (ansVal + step * 2).toString(), isIcon: false },
+        ].filter(d => d.val !== ansVal && d.val >= 0).slice(0, 2); // Keep valid
+
+    } else {
+        // --- SHAPE/ICON PATTERN LOGIC ---
+        const currentTheme = THEMES[theme];
+        // Pick 2 or 3 distinct items for pattern
+        const pool = [...currentTheme.items].sort(() => 0.5 - Math.random());
+        const itemA = pool[0];
+        const itemB = pool[1];
+        const itemC = pool[2];
+
+        // Random Colors from theme palette
+        const colorPool = [...currentTheme.colors].sort(() => 0.5 - Math.random());
+        const colorA = colorPool[0];
+        const colorB = colorPool[1];
+        const colorC = colorPool[2];
+
+        const patternType = Math.random() > 0.5 ? 'ABAB' : 'ABC';
+        let baseItems: any[] = [];
+        let baseColors: string[] = [];
+
+        if (patternType === 'ABAB') {
+            // A B A B A B
+            baseItems = [itemA, itemB, itemA, itemB, itemA, itemB];
+            baseColors = [colorA, colorB, colorA, colorB, colorA, colorB];
+        } else {
+            // A B C A B C
+            baseItems = [itemA, itemB, itemC, itemA, itemB, itemC];
+            baseColors = [colorA, colorB, colorC, colorA, colorB, colorC];
+        }
+
+        newSeq = baseItems.map((it, idx) => ({
+            id: `p-${idx}`,
+            val: it.icon,
+            label: it.label,
+            color: baseColors[idx],
+            isIcon: true
+        }));
+
+        answer = newSeq[hideIdx];
+
+        // Distractors: Items from pool that are NOT the correct shape/color combo
+        // We create a mix of different shapes to test shape recognition
+        const wrongPool = currentTheme.items.filter(i => i.label !== answer.label);
+        // If pool is small, reuse items but change colors? 
+        // Simple strategy: Pick random items from theme that aren't the answer
+        distractors = wrongPool.slice(0, 2).map((it, idx) => ({
+            id: `d-${idx}`,
+            val: it.icon,
+            label: it.label,
+            color: currentTheme.colors[(currentTheme.colors.indexOf(answer.color) + 1 + idx) % currentTheme.colors.length],
+            isIcon: true
+        }));
+    }
+
+    setSequence(newSeq);
     
-    const allOpts = [correct, ...wrongs].sort(() => 0.5 - Math.random());
-    setOptions(allOpts as PatternItem[]);
+    // Shuffle options
+    const allOptions = [answer, ...distractors].sort(() => 0.5 - Math.random());
+    // Ensure unique IDs for options to avoid React key issues
+    setOptions(allOptions.map((o, i) => ({ ...o, id: `opt-${i}` })));
   };
 
-  const handleSelect = (selected: PatternItem) => {
+  const handleSelect = (selected: PatternElement) => {
       if (status !== 'playing') return;
 
       setPlacedItem(selected);
 
       const correct = sequence[missingIndex];
-      if (selected.shape === correct.shape && selected.color === correct.color) {
+      // Compare values
+      const isCorrect = selected.label === correct.label; // Simple label check works for both nums and icons
+
+      if (isCorrect) {
           setStatus('correct');
       } else {
           setStatus('wrong');
-          // Wait a bit, then reset (simulate "returning" to options)
           setTimeout(() => {
               setPlacedItem(null);
               setStatus('playing');
@@ -76,120 +198,175 @@ export const PatternSim: React.FC = () => {
       }
   };
 
-  const renderShape = (item: PatternItem, sizeClass = 'w-12 h-12 md:w-16 md:h-16') => {
-      const classes = `${sizeClass} shadow-md transition-all duration-300 ${item.color}`;
-      switch (item.shape) {
-          case 'circle': return <div className={`${classes} rounded-full`} />;
-          case 'square': return <div className={`${classes} rounded-md`} />;
-          case 'triangle': return <div className={`w-0 h-0 border-l-[24px] md:border-l-[32px] border-l-transparent border-r-[24px] md:border-r-[32px] border-r-transparent border-b-[48px] md:border-b-[64px] ${item.color.replace('bg-', 'border-b-')} drop-shadow-md`} />;
-          case 'star': return (
-            <svg viewBox="0 0 24 24" className={`${sizeClass} text-${item.color.split('-')[1]}-${item.color.split('-')[2]} drop-shadow-md`} fill="currentColor">
-                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-            </svg>
+  const renderItem = (item: PatternElement, size: 'sm' | 'lg' = 'lg') => {
+      const sizeClasses = size === 'lg' ? 'w-16 h-16 text-4xl' : 'w-12 h-12 text-2xl';
+      
+      if (item.isIcon) {
+          const Icon = item.val;
+          return (
+             <div className={`${sizeClasses} flex items-center justify-center drop-shadow-sm transition-transform hover:scale-110 ${item.color}`}>
+                 <Icon size={size === 'lg' ? 48 : 32} strokeWidth={2.5} />
+             </div>
           );
-          default: return null;
+      } else {
+          return (
+              <div className={`${sizeClasses} flex items-center justify-center font-black ${item.color} bg-white rounded-xl shadow-sm border-2 border-indigo-100`}>
+                  {item.val}
+              </div>
+          );
       }
   };
 
   return (
-    <div className="flex flex-col h-full bg-indigo-50 p-4 rounded-xl items-center relative overflow-y-auto">
-      <div className="flex justify-between w-full items-center mb-6">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-indigo-700 flex items-center">
-            <Shapes className="mr-3" /> Finish the Pattern!
+    <div className="flex flex-col h-full bg-slate-50 p-4 rounded-xl items-center relative overflow-y-auto custom-scrollbar">
+      {/* Header & Controls */}
+      <div className="w-full max-w-4xl mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+          <h2 className="text-2xl md:text-3xl font-extrabold text-indigo-800 flex items-center gap-3">
+            {mode === 'numbers' ? <Calculator className="text-indigo-500" /> : <Shapes className="text-indigo-500" />}
+            <span>Pattern Puzzle</span>
           </h2>
-          <button 
-             onClick={generateNewPattern} 
-             className="bg-white hover:bg-indigo-100 text-indigo-600 p-2 rounded-full shadow-sm transition"
-             title="New Pattern"
-          >
-              <RefreshCcw size={20} />
-          </button>
+
+          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+             {/* Mode Switch */}
+             <div className="flex bg-slate-100 rounded-xl p-1">
+                 <button 
+                    onClick={() => setMode('shapes')}
+                    className={`px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2 ${mode === 'shapes' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                 >
+                     <Shapes size={16} /> <span className="hidden sm:inline">Shapes</span>
+                 </button>
+                 <button 
+                    onClick={() => setMode('numbers')}
+                    className={`px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2 ${mode === 'numbers' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                 >
+                     <Calculator size={16} /> <span className="hidden sm:inline">Numbers</span>
+                 </button>
+             </div>
+             
+             {/* Theme Switch (Only for Shapes) */}
+             {mode === 'shapes' && (
+                 <div className="relative group">
+                     <button className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition">
+                        <Palette size={20} />
+                     </button>
+                     {/* Hover Dropdown */}
+                     <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-indigo-100 p-2 min-w-[150px] z-50 hidden group-hover:block animate-fade-in">
+                        <p className="text-xs font-bold text-slate-400 uppercase px-2 mb-2">Select Theme</p>
+                        {(Object.keys(THEMES) as ThemeType[]).map(t => (
+                            <button
+                                key={t}
+                                onClick={() => setTheme(t)}
+                                className={`w-full text-left px-3 py-2 rounded-lg font-bold text-sm mb-1 ${theme === t ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-50 text-slate-600'}`}
+                            >
+                                {THEMES[t].label}
+                            </button>
+                        ))}
+                     </div>
+                 </div>
+             )}
+
+             <div className="w-px h-8 bg-slate-200 mx-1"></div>
+
+             <button 
+                onClick={generateNewPattern} 
+                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-600 p-2.5 rounded-xl transition"
+                title="New Pattern"
+             >
+                 <RefreshCcw size={20} />
+             </button>
+          </div>
       </div>
 
-      {/* The Pattern Train */}
-      <div className="flex flex-wrap justify-center items-center gap-2 md:gap-4 mb-10 p-4 md:p-8 bg-white rounded-3xl shadow-xl border-4 border-indigo-100 w-full max-w-4xl">
-          {sequence.map((item, idx) => {
-              const isMissing = idx === missingIndex;
-              const content = (() => {
-                  if (isMissing) {
-                      if (placedItem) {
-                          // Show the placed item (either correct or wrong)
-                          return (
-                              <div className={`relative animate-pop-in ${status === 'wrong' ? 'animate-shake' : ''}`}>
-                                  {renderShape(placedItem)}
-                                  {status === 'wrong' && (
-                                      <div className="absolute inset-0 flex items-center justify-center bg-red-500/20 rounded-lg">
-                                      </div>
-                                  )}
-                              </div>
-                          );
-                      }
-                      // Empty slot
-                      return (
-                          <div className="w-12 h-12 md:w-16 md:h-16 border-4 border-dashed border-indigo-300 bg-indigo-50 rounded-xl flex items-center justify-center">
-                              <span className="text-2xl font-bold text-indigo-200">?</span>
-                          </div>
-                      );
-                  }
-                  return renderShape(item);
-              })();
+      {/* The Pattern Display */}
+      <div className="flex-1 flex flex-col items-center w-full max-w-4xl">
+          
+          {/* Sequence Container */}
+          <div className="w-full bg-white rounded-3xl shadow-xl border-4 border-indigo-50 p-6 md:p-10 mb-8 flex flex-wrap justify-center items-center gap-2 md:gap-4 relative min-h-[160px]">
+              {/* Background decorative track line */}
+              <div className="absolute left-4 right-4 h-2 bg-slate-100 rounded-full top-1/2 -translate-y-1/2 -z-0"></div>
 
-              return (
-                  <div key={idx} className="relative flex items-center">
-                      {content}
-                      {/* Connector Line */}
-                      {idx < sequence.length - 1 && (
-                          <div className="w-4 md:w-8 h-1 bg-gray-200 mx-1 md:mx-2 rounded-full"></div>
+              {sequence.map((item, idx) => {
+                  const isMissing = idx === missingIndex;
+                  return (
+                      <div key={item.id} className="relative z-10">
+                          {isMissing ? (
+                               <div className={`relative transition-all duration-300 ${status === 'wrong' && placedItem ? 'animate-shake' : ''}`}>
+                                    {placedItem ? (
+                                        <div className="relative animate-pop-in">
+                                            {renderItem(placedItem, 'lg')}
+                                            {status === 'wrong' && (
+                                                <div className="absolute inset-0 bg-red-500/20 rounded-xl border-2 border-red-500 animate-pulse"></div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="w-16 h-16 md:w-20 md:h-20 bg-indigo-50 rounded-2xl border-4 border-dashed border-indigo-300 flex items-center justify-center animate-pulse">
+                                            <span className="text-3xl font-bold text-indigo-200">?</span>
+                                        </div>
+                                    )}
+                                    {/* Helper Arrow for missing spot */}
+                                    {!placedItem && (
+                                        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-indigo-400 text-xs font-bold uppercase tracking-widest animate-bounce">
+                                            Here!
+                                        </div>
+                                    )}
+                               </div>
+                          ) : (
+                              <div className="transform transition-transform hover:-translate-y-1">
+                                  {renderItem(item, 'lg')}
+                              </div>
+                          )}
+                      </div>
+                  );
+              })}
+          </div>
+
+          {/* Feedback & Options Area */}
+          <div className="w-full max-w-2xl text-center">
+              {status === 'correct' ? (
+                  <div className="animate-fade-in-up bg-green-100 p-8 rounded-3xl border-4 border-green-200 shadow-lg">
+                      <div className="text-6xl mb-2">🎉</div>
+                      <h3 className="text-3xl font-black text-green-700 mb-2">Super Pattern!</h3>
+                      <p className="text-green-800 font-medium mb-6 text-lg">You found the missing piece.</p>
+                      <button 
+                        onClick={generateNewPattern} 
+                        className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full text-xl font-bold shadow-xl transition transform hover:scale-105 flex items-center justify-center gap-2 mx-auto"
+                      >
+                          Next Pattern <ArrowRight size={24} />
+                      </button>
+                  </div>
+              ) : (
+                  <div className="bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-indigo-100">
+                      <h3 className="text-lg md:text-xl text-indigo-900 font-bold mb-6 bg-indigo-100/50 py-2 px-6 rounded-full inline-block">
+                          {mode === 'numbers' ? 'What comes next?' : 'Which one fits?'}
+                      </h3>
+                      
+                      <div className="flex flex-wrap justify-center gap-4 md:gap-8">
+                          {options.map((opt) => {
+                              const isPlaced = placedItem?.id === opt.id;
+                              return (
+                                  <button 
+                                      key={opt.id} 
+                                      onClick={() => handleSelect(opt)}
+                                      disabled={isPlaced || status === 'wrong'}
+                                      className={`
+                                          p-4 bg-white rounded-2xl shadow-[0_8px_0_rgb(226,232,240)] active:shadow-none active:translate-y-[8px] border-2 border-slate-100
+                                          transition-all duration-150
+                                          ${isPlaced ? 'opacity-0 pointer-events-none' : 'hover:border-indigo-200 hover:bg-indigo-50'}
+                                      `}
+                                  >
+                                      {renderItem(opt, 'lg')}
+                                  </button>
+                              );
+                          })}
+                      </div>
+                      {status === 'wrong' && (
+                          <div className="mt-6 text-red-500 font-bold animate-pulse">
+                              Oops! Try a different one.
+                          </div>
                       )}
                   </div>
-              );
-          })}
-      </div>
-
-      <div className="flex-1 flex flex-col items-center justify-start w-full max-w-2xl">
-        {status === 'correct' ? (
-            <div className="text-center animate-fade-in-up bg-green-100 p-6 rounded-2xl border-2 border-green-200 shadow-md">
-                <h3 className="text-3xl font-black text-green-600 mb-2">Awesome!</h3>
-                <p className="text-green-700 mb-6 font-medium">You completed the pattern!</p>
-                <button onClick={generateNewPattern} className="px-8 py-3 bg-green-500 text-white rounded-full text-lg font-bold shadow-lg hover:bg-green-600 transition transform hover:scale-105 flex items-center gap-2 mx-auto">
-                    Next Pattern <ArrowRight size={20} />
-                </button>
-            </div>
-        ) : (
-            <div className="text-center w-full">
-                <h3 className="text-xl text-indigo-800 font-bold mb-6 bg-indigo-100 py-2 px-6 rounded-full inline-block">
-                    Which shape fits?
-                </h3>
-                
-                <div className="flex flex-wrap justify-center gap-4 md:gap-8 min-h-[100px]">
-                    {options.map((opt, i) => {
-                        // If this option is currently placed in the slot, hide it here (ghost effect)
-                        const isPlaced = placedItem?.id === opt.id;
-                        
-                        return (
-                            <button 
-                                key={opt.id} 
-                                onClick={() => handleSelect(opt)}
-                                disabled={isPlaced || status === 'wrong'}
-                                className={`
-                                    p-4 bg-white rounded-2xl shadow-lg border-b-4 border-indigo-100 
-                                    transition-all duration-200 
-                                    ${isPlaced ? 'opacity-0 scale-50 pointer-events-none' : 'hover:-translate-y-2 hover:border-indigo-300 hover:shadow-xl cursor-pointer active:scale-95'}
-                                `}
-                            >
-                                {renderShape(opt)}
-                            </button>
-                        );
-                    })}
-                </div>
-                
-                {status === 'wrong' && (
-                    <p className="text-red-500 font-bold mt-8 animate-pulse">
-                        Oops! That doesn't fit. It will go back...
-                    </p>
-                )}
-            </div>
-        )}
+              )}
+          </div>
       </div>
     </div>
   );
