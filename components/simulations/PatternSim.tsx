@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shapes, RefreshCcw, ArrowRight, Calculator, Palette,
   Rocket, Moon, Star, Sun, Cloud, Umbrella, Zap, Snowflake,
-  Cat, Dog, Fish, Bird, Bug, Flower, Heart, Circle, Square, Triangle, Hexagon
+  Cat, Dog, Fish, Bird, Bug, Flower, Heart, Circle, Square, Triangle, Hexagon,
+  Gauge
 } from 'lucide-react';
 
 // Local types to avoid modifying types.ts
 type PatternMode = 'shapes' | 'numbers';
 type ThemeType = 'geometric' | 'space' | 'weather' | 'animals';
+type DifficultyLevel = 'easy' | 'medium' | 'hard';
 
 interface PatternElement {
   id: string;
@@ -61,11 +63,10 @@ const THEMES: Record<ThemeType, { label: string, items: { icon: any, label: stri
   }
 };
 
-const NUMBER_STEPS = [1, 2, 5, 10];
-
 export const PatternSim: React.FC = () => {
   const [mode, setMode] = useState<PatternMode>('shapes');
-  const [theme, setTheme] = useState<ThemeType>('space'); // Default to fun theme
+  const [theme, setTheme] = useState<ThemeType>('space');
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>('easy');
   
   const [sequence, setSequence] = useState<PatternElement[]>([]);
   const [options, setOptions] = useState<PatternElement[]>([]);
@@ -75,15 +76,22 @@ export const PatternSim: React.FC = () => {
 
   useEffect(() => {
     generateNewPattern();
-  }, [mode, theme]);
+  }, [mode, theme, difficulty]);
 
   const generateNewPattern = () => {
     setPlacedItem(null);
     setStatus('playing');
 
-    // 1. Determine Missing Index (Random between 2 and 5 to ensure context)
-    // Sequence length is 6. Indices 0..5. We avoid hiding 0 or 1 so kid sees the start.
-    const hideIdx = Math.floor(Math.random() * 4) + 2; // Returns 2, 3, 4, or 5
+    // 1. Determine Missing Index based on Difficulty
+    let hideIdx = 5; // Default Easy: Always the last one
+    
+    if (difficulty === 'medium') {
+        // Medium: Hides one of the last two
+        hideIdx = Math.random() > 0.5 ? 4 : 5;
+    } else if (difficulty === 'hard') {
+        // Hard: Hides anywhere from index 2 to 5
+        hideIdx = Math.floor(Math.random() * 4) + 2; 
+    }
     setMissingIndex(hideIdx);
 
     let newSeq: PatternElement[] = [];
@@ -92,79 +100,113 @@ export const PatternSim: React.FC = () => {
 
     if (mode === 'numbers') {
         // --- NUMBER PATTERN LOGIC ---
-        const start = Math.floor(Math.random() * 10) + 1; // 1 to 10
-        const step = NUMBER_STEPS[Math.floor(Math.random() * NUMBER_STEPS.length)];
-        const isAscending = Math.random() > 0.3; // Mostly ascending, sometimes descending
+        let step = 1;
+        let start = 1;
+        let isAscending = true;
+
+        if (difficulty === 'easy') {
+            // Simple steps: 1, 2, 5, 10. Start small. Ascending only.
+            step = [1, 2, 5, 10][Math.floor(Math.random() * 4)];
+            start = Math.floor(Math.random() * 20) + 1;
+            isAscending = true;
+        } else if (difficulty === 'medium') {
+            // Moderate steps: 3, 4, 6. Start up to 50. Mixed direction.
+            step = [3, 4, 6][Math.floor(Math.random() * 3)];
+            start = Math.floor(Math.random() * 50) + 1;
+            isAscending = Math.random() > 0.3; // Mostly ascending
+        } else {
+            // Hard steps: 7, 8, 9, 11, 12, 15. Start up to 90. Mixed direction.
+            step = [7, 8, 9, 11, 12, 15][Math.floor(Math.random() * 6)];
+            start = Math.floor(Math.random() * 80) + 10;
+            isAscending = Math.random() > 0.5;
+        }
         
         for (let i = 0; i < 6; i++) {
-            const val = isAscending ? start + (i * step) : (start + 20) - (i * step); // ensure positive for desc
+            const val = isAscending ? start + (i * step) : (start + (step * 8)) - (i * step); // ensure positive for desc
             newSeq.push({
                 id: `num-${i}`,
-                val: val,
+                val: Math.max(0, val), // Safety floor 0
                 color: 'text-indigo-600',
-                label: val.toString(),
+                label: Math.max(0, val).toString(),
                 isIcon: false
             });
         }
         
         answer = newSeq[hideIdx];
+        const ansVal = answer.val as number;
         
         // Generate smart distractors
-        const ansVal = answer.val as number;
         distractors = [
             { id: 'd1', val: ansVal + step, color: 'text-indigo-600', label: (ansVal + step).toString(), isIcon: false },
-            { id: 'd2', val: ansVal - step, color: 'text-indigo-600', label: (ansVal - step).toString(), isIcon: false },
+            { id: 'd2', val: Math.max(0, ansVal - step), color: 'text-indigo-600', label: Math.max(0, ansVal - step).toString(), isIcon: false },
             { id: 'd3', val: ansVal + (step * 2), color: 'text-indigo-600', label: (ansVal + step * 2).toString(), isIcon: false },
-        ].filter(d => d.val !== ansVal && d.val >= 0).slice(0, 2); // Keep valid
+        ].filter(d => d.val !== ansVal).slice(0, 2); 
 
     } else {
         // --- SHAPE/ICON PATTERN LOGIC ---
         const currentTheme = THEMES[theme];
-        // Pick 2 or 3 distinct items for pattern
+        // Shuffle items and colors to get randomness for this round
         const pool = [...currentTheme.items].sort(() => 0.5 - Math.random());
-        const itemA = pool[0];
-        const itemB = pool[1];
-        const itemC = pool[2];
-
-        // Random Colors from theme palette
         const colorPool = [...currentTheme.colors].sort(() => 0.5 - Math.random());
-        const colorA = colorPool[0];
-        const colorB = colorPool[1];
-        const colorC = colorPool[2];
 
-        const patternType = Math.random() > 0.5 ? 'ABAB' : 'ABC';
-        let baseItems: any[] = [];
-        let baseColors: string[] = [];
+        let patternType = 'ABAB';
+        let items: typeof currentTheme.items = [];
+        let colors: string[] = [];
+        let basePatternIndices: number[] = [];
 
-        if (patternType === 'ABAB') {
-            // A B A B A B
-            baseItems = [itemA, itemB, itemA, itemB, itemA, itemB];
-            baseColors = [colorA, colorB, colorA, colorB, colorA, colorB];
+        if (difficulty === 'easy') {
+            // ABABAB
+            patternType = 'ABAB';
+            items = pool.slice(0, 2);
+            colors = colorPool.slice(0, 2);
+            basePatternIndices = [0, 1, 0, 1, 0, 1];
+        } else if (difficulty === 'medium') {
+            // ABCABC or AABBAA
+            patternType = Math.random() > 0.5 ? 'ABC' : 'AABB';
+            if (patternType === 'ABC') {
+                items = pool.slice(0, 3);
+                colors = colorPool.slice(0, 3);
+                basePatternIndices = [0, 1, 2, 0, 1, 2];
+            } else {
+                items = pool.slice(0, 2);
+                colors = colorPool.slice(0, 2);
+                basePatternIndices = [0, 0, 1, 1, 0, 0];
+            }
         } else {
-            // A B C A B C
-            baseItems = [itemA, itemB, itemC, itemA, itemB, itemC];
-            baseColors = [colorA, colorB, colorC, colorA, colorB, colorC];
+            // Hard: ABCD or ABAC
+            // Limited by 4 items per theme usually
+            patternType = Math.random() > 0.5 ? 'ABCD' : 'ABAC';
+            if (patternType === 'ABCD') {
+                items = pool.slice(0, 4);
+                colors = colorPool.slice(0, 4);
+                basePatternIndices = [0, 1, 2, 3, 0, 1];
+            } else {
+                items = pool.slice(0, 3);
+                colors = colorPool.slice(0, 3);
+                // A B A C A B
+                basePatternIndices = [0, 1, 0, 2, 0, 1];
+            }
         }
 
-        newSeq = baseItems.map((it, idx) => ({
-            id: `p-${idx}`,
-            val: it.icon,
-            label: it.label,
-            color: baseColors[idx],
+        newSeq = basePatternIndices.map((pIdx, i) => ({
+            id: `p-${i}`,
+            val: items[pIdx].icon,
+            label: items[pIdx].label,
+            color: colors[pIdx],
             isIcon: true
         }));
 
         answer = newSeq[hideIdx];
 
-        // Distractors: Items from pool that are NOT the correct shape/color combo
-        // We create a mix of different shapes to test shape recognition
-        const wrongPool = currentTheme.items.filter(i => i.label !== answer.label);
-        // If pool is small, reuse items but change colors? 
-        // Simple strategy: Pick random items from theme that aren't the answer
-        distractors = wrongPool.slice(0, 2).map((it, idx) => ({
+        // Distractors
+        // Get items from the theme that are NOT the correct answer's label
+        const wrongItems = currentTheme.items.filter(i => i.label !== answer.label);
+        
+        distractors = wrongItems.slice(0, 2).map((it, idx) => ({
             id: `d-${idx}`,
             val: it.icon,
             label: it.label,
+            // Assign a color from pool that isn't the answer color if possible, or just random
             color: currentTheme.colors[(currentTheme.colors.indexOf(answer.color) + 1 + idx) % currentTheme.colors.length],
             isIcon: true
         }));
@@ -174,7 +216,6 @@ export const PatternSim: React.FC = () => {
     
     // Shuffle options
     const allOptions = [answer, ...distractors].sort(() => 0.5 - Math.random());
-    // Ensure unique IDs for options to avoid React key issues
     setOptions(allOptions.map((o, i) => ({ ...o, id: `opt-${i}` })));
   };
 
@@ -184,8 +225,7 @@ export const PatternSim: React.FC = () => {
       setPlacedItem(selected);
 
       const correct = sequence[missingIndex];
-      // Compare values
-      const isCorrect = selected.label === correct.label; // Simple label check works for both nums and icons
+      const isCorrect = selected.label === correct.label; 
 
       if (isCorrect) {
           setStatus('correct');
@@ -220,13 +260,28 @@ export const PatternSim: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-slate-50 p-4 rounded-xl items-center relative overflow-y-auto custom-scrollbar">
       {/* Header & Controls */}
-      <div className="w-full max-w-4xl mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div className="w-full max-w-5xl mb-6 flex flex-col xl:flex-row justify-between items-center gap-4">
           <h2 className="text-2xl md:text-3xl font-extrabold text-indigo-800 flex items-center gap-3">
             {mode === 'numbers' ? <Calculator className="text-indigo-500" /> : <Shapes className="text-indigo-500" />}
             <span>Pattern Puzzle</span>
           </h2>
 
-          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+          <div className="flex flex-wrap justify-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+             {/* Difficulty Switch */}
+             <div className="flex bg-slate-100 rounded-xl p-1">
+                 {(['easy', 'medium', 'hard'] as const).map(d => (
+                     <button
+                        key={d}
+                        onClick={() => setDifficulty(d)}
+                        className={`px-3 py-1.5 rounded-lg font-bold text-xs uppercase transition ${difficulty === d ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                     >
+                        {d}
+                     </button>
+                 ))}
+             </div>
+
+             <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
+
              {/* Mode Switch */}
              <div className="flex bg-slate-100 rounded-xl p-1">
                  <button 
@@ -336,9 +391,14 @@ export const PatternSim: React.FC = () => {
                   </div>
               ) : (
                   <div className="bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-indigo-100">
-                      <h3 className="text-lg md:text-xl text-indigo-900 font-bold mb-6 bg-indigo-100/50 py-2 px-6 rounded-full inline-block">
-                          {mode === 'numbers' ? 'What comes next?' : 'Which one fits?'}
-                      </h3>
+                      <div className="flex items-center justify-center gap-3 mb-6">
+                        <h3 className="text-lg md:text-xl text-indigo-900 font-bold bg-indigo-100/50 py-2 px-6 rounded-full inline-block">
+                            {mode === 'numbers' ? 'What comes next?' : 'Which one fits?'}
+                        </h3>
+                        <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${difficulty === 'easy' ? 'bg-green-100 text-green-700 border-green-200' : difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
+                            {difficulty}
+                        </div>
+                      </div>
                       
                       <div className="flex flex-wrap justify-center gap-4 md:gap-8">
                           {options.map((opt) => {
